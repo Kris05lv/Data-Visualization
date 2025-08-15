@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>US Educational Attainment</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/topojson.v3.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        #title {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        #description {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+            color: #666;
+        }
+        #tooltip {
+            position: absolute;
+            padding: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            pointer-events: none;
+            opacity: 0;
+        }
+        .county:hover {
+            stroke: black;
+            stroke-width: 1px;
+            cursor: pointer;
+        }
+        #legend {
+            margin-top: 20px;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+    </style>
+</head>
+<body>
+    <h1 id="title">US Educational Attainment</h1>
+    <p id="description">Percentage of adults age 25 and older with a bachelor's degree or higher (2010-2014)</p>
+    <div id="tooltip"></div>
+    <svg id="map"></svg>
+    <svg id="legend"></svg>
+
+    <script>
+        // Constants
+        const width = 960;
+        const height = 600;
+        const legendWidth = 400;
+        const legendHeight = 60;
+
+        // Create SVG
+        const svg = d3.select('#map')
+            .attr('width', width)
+            .attr('height', height)
+            .style('background-color', '#fff');
+
+        // Create legend SVG
+        const legend = d3.select('#legend')
+            .attr('width', legendWidth)
+            .attr('height', legendHeight);
+
+        // Color scale
+        const colorScale = d3.scaleThreshold()
+            .domain([15, 30, 45, 60])
+            .range(d3.schemeBlues[5]);
+
+        // Load data
+        Promise.all([
+            d3.json('https://cdn.freecodecamp.org/testable-projects-fcc/data/choropleth_map/counties.json'),
+            d3.json('https://cdn.freecodecamp.org/testable-projects-fcc/data/choropleth_map/for_user_education.json')
+        ]).then(([countyData, educationData]) => {
+            // Create education data map for quick lookup
+            const educationMap = new Map(educationData.map(d => [d.fips, d.bachelorsOrHigher]));
+
+            // Create path generator
+            const path = d3.geoPath();
+
+            // Draw counties
+            svg.append('g')
+                .selectAll('path')
+                .data(topojson.feature(countyData, countyData.objects.counties).features)
+                .enter()
+                .append('path')
+                .attr('class', 'county')
+                .attr('data-fips', d => d.id)
+                .attr('data-education', d => educationMap.get(d.id))
+                .attr('fill', d => colorScale(educationMap.get(d.id)))
+                .attr('d', path)
+                .attr('stroke', '#fff')
+                .attr('stroke-width', 0.1)
+                .on('mouseover', (event, d) => {
+                    const education = educationMap.get(d.id);
+                    const county = d.properties.name;
+                    const state = educationData.find(item => item.fips === d.id).state;
+                    d3.select('#tooltip')
+                        .style('opacity', 0.9)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 28) + 'px')
+                        .attr('data-education', education)
+                        .html(`${county}, ${state}<br>Bachelor's or higher: ${education}%`);
+                })
+                .on('mouseout', () => {
+                    d3.select('#tooltip').style('opacity', 0);
+                });
+
+            // Add state borders
+            svg.append('path')
+                .datum(topojson.mesh(countyData, countyData.objects.states, (a, b) => a !== b))
+                .attr('fill', 'none')
+                .attr('stroke', '#000')
+                .attr('stroke-width', 0.5)
+                .attr('d', path);
+
+            // Create legend
+            const legendScale = d3.scaleLinear()
+                .domain([0, 75])
+                .range([0, legendWidth - 50]);
+
+            const legendAxis = d3.axisBottom(legendScale)
+                .tickValues([0, ...colorScale.domain(), 75])
+                .tickFormat(d => `${d}%`);
+
+            legend.append('g')
+                .attr('transform', `translate(25, ${legendHeight - 20})`)
+                .call(legendAxis);
+
+            // Add legend rectangles
+            const legendRects = legend.append('g')
+                .attr('transform', 'translate(25, 0)');
+
+            // Create legend color blocks
+            const legendData = colorScale.range().map((color, i) => ({
+                color: color,
+                x0: i === 0 ? 0 : colorScale.domain()[i - 1],
+                x1: colorScale.domain()[i] || 75
+            }));
+
+            legendRects.selectAll('rect')
+                .data(legendData)
+                .enter()
+                .append('rect')
+                .attr('x', d => legendScale(d.x0))
+                .attr('y', 0)
+                .attr('width', d => legendScale(d.x1) - legendScale(d.x0))
+                .attr('height', legendHeight - 20)
+                .attr('fill', d => d.color)
+                .attr('stroke', '#fff')
+                .attr('stroke-width', 0.5);
+        });
+    </script>
+</body>
+</html>
