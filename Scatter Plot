@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doping in Professional Bicycle Racing</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .dot {
+            stroke: #fff;
+            stroke-width: 2px;
+            opacity: 0.8;
+            transition: opacity 0.3s;
+        }
+        .dot:hover {
+            opacity: 1;
+        }
+        #tooltip {
+            position: absolute;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            border-radius: 4px;
+            pointer-events: none;
+            display: none;
+            font-size: 14px;
+        }
+        .tick text {
+            font-size: 12px;
+        }
+        .axis-label {
+            font-size: 14px;
+            fill: #333;
+        }
+        #legend {
+            font-size: 12px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="title">Doping in Professional Bicycle Racing</h1>
+        <h2>35 Fastest times up Alpe d'Huez</h2>
+        <div id="chart"></div>
+        <div id="tooltip"></div>
+    </div>
+
+    <script>
+        // Constants for chart dimensions
+        const margin = { top: 40, right: 160, bottom: 60, left: 80 };
+        const width = 920 - margin.left - margin.right;
+        const height = 600 - margin.top - margin.bottom;
+
+        // Create SVG container
+        const svg = d3.select('#chart')
+            .append('svg')
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
+
+        // Fetch and process data
+        fetch('https://raw.githubusercontent.com/freeCodeCamp/ProjectReferenceData/master/cyclist-data.json')
+            .then(response => response.json())
+            .then(data => {
+                // Process time strings to Date objects for y-axis
+                data.forEach(d => {
+                    const [mins, secs] = d.Time.split(':');
+                    d.TimeDate = new Date(1970, 0, 1, 0, mins, secs);
+                });
+
+                // Create scales
+                const xScale = d3.scaleLinear()
+                    .domain([d3.min(data, d => d.Year - 1), d3.max(data, d => d.Year + 1)])
+                    .range([0, width]);
+
+                const yScale = d3.scaleTime()
+                    .domain(d3.extent(data, d => d.TimeDate))
+                    .range([height, 0]);
+
+                // Create axes
+                const xAxis = d3.axisBottom(xScale).tickFormat(d3.format('d'));
+                const yAxis = d3.axisLeft(yScale).tickFormat(d3.timeFormat('%M:%S'));
+
+                // Add x-axis
+                svg.append('g')
+                    .attr('id', 'x-axis')
+                    .attr('transform', `translate(0,${height})`)
+                    .call(xAxis);
+
+                // Add y-axis
+                svg.append('g')
+                    .attr('id', 'y-axis')
+                    .call(yAxis);
+
+                // Add axis labels
+                svg.append('text')
+                    .attr('class', 'axis-label')
+                    .attr('text-anchor', 'middle')
+                    .attr('transform', 'rotate(-90)')
+                    .attr('y', -margin.left + 20)
+                    .attr('x', -height/2)
+                    .text('Time (MM:SS)');
+
+                svg.append('text')
+                    .attr('class', 'axis-label')
+                    .attr('text-anchor', 'middle')
+                    .attr('x', width/2)
+                    .attr('y', height + margin.bottom - 10)
+                    .text('Year');
+
+                // Add dots
+                svg.selectAll('.dot')
+                    .data(data)
+                    .enter()
+                    .append('circle')
+                    .attr('class', 'dot')
+                    .attr('cx', d => xScale(d.Year))
+                    .attr('cy', d => yScale(d.TimeDate))
+                    .attr('r', 6)
+                    .attr('data-xvalue', d => d.Year)
+                    .attr('data-yvalue', d => d.TimeDate.toISOString())
+                    .style('fill', d => d.Doping ? '#e41a1c' : '#4daf4a')
+                    .on('mouseover', function(event, d) {
+                        const tooltip = d3.select('#tooltip');
+                        tooltip
+                            .style('display', 'block')
+                            .style('left', (event.pageX + 10) + 'px')
+                            .style('top', (event.pageY - 28) + 'px')
+                            .attr('data-year', d.Year)
+                            .html(`${d.Name}: ${d.Nationality}<br>
+Year: ${d.Year}, Time: ${d.Time}<br>
+${d.Doping ? `<br>${d.Doping}` : ''}`);
+                    })
+                    .on('mouseout', function() {
+                        d3.select('#tooltip').style('display', 'none');
+                    });
+
+                // Add legend
+                const legend = svg.append('g')
+                    .attr('id', 'legend')
+                    .attr('transform', `translate(${width + 20}, 20)`);
+
+                const legendData = [
+                    { color: '#4daf4a', text: 'No doping allegations' },
+                    { color: '#e41a1c', text: 'Riders with doping allegations' }
+                ];
+
+                const legendItems = legend.selectAll('.legend-item')
+                    .data(legendData)
+                    .enter()
+                    .append('g')
+                    .attr('class', 'legend-item')
+                    .attr('transform', (d, i) => `translate(0, ${i * 25})`);
+
+                legendItems.append('rect')
+                    .attr('width', 18)
+                    .attr('height', 18)
+                    .style('fill', d => d.color);
+
+                legendItems.append('text')
+                    .attr('x', 24)
+                    .attr('y', 9)
+                    .attr('dy', '.35em')
+                    .text(d => d.text);
+            });
+    </script>
+</body>
+</html>
